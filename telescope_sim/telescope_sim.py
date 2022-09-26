@@ -100,7 +100,11 @@ def add_multi_aperture_telescope_args(parser):
     ### Primary aperture setup ###
     parser.add_argument('--mirror_layout', type=str,
                         default='elf',
-                        help='Telescope layout, can be "elf", "monolithic", "keck" (Default: "elf")')
+                        help='Telescope layout, can be "elf", "monolithic", "keck", "custom" (Default: "elf")')
+    
+    parser.add_argument('--mirror_centers', 
+                        default=None,
+                        help='If layout custom, a pkl file with (2, n_mirror) matrix of x, y mirror center positions (array can also be passed when calling from python)')
     
     parser.add_argument('--num_apertures', type=int,
                         default=15,
@@ -289,6 +293,8 @@ class SimulateMultiApertureTelescope():
 
                 # Use HCIPy coordinate generation to quickly generate mirror centers
                 aper_coords = hcipy.SeparatedCoords((np.array([self.telescope_radius]), thetas))
+                self.ap = aper_coords
+                print(aper_coords)
 
                 # Create an HCIPy "CartesianGrid" by creating PolarGrid and converting
                 self.aperture_centers = m_cens = hcipy.PolarGrid(aper_coords).as_('cartesian')
@@ -308,7 +314,36 @@ class SimulateMultiApertureTelescope():
                 self.pupil_plane_diamater *= 1.05  
 
                 self.aperture_config = ['circular', aperture_diamater]
+                
+            if self.mirror_layout == 'custom_mir_cens':
+                ### Generate ELF-like telescope geometry annulus of sub-apertures with centers at telescope_radius
+                self.num_apertures = kwargs['num_apertures']
 
+                # Linear space of angular coordinates for mirror centers
+                thetas = np.linspace(0, 2*np.pi, self.num_apertures+1)[:-1]
+
+                # Use HCIPy coordinate generation to quickly generate mirror centers
+                aper_coords = hcipy.SeparatedCoords((np.array([self.telescope_radius]), thetas))
+
+                # Create an HCIPy "CartesianGrid" by creating PolarGrid and converting
+                self.aperture_centers = m_cens = hcipy.PolarGrid(aper_coords).as_('cartesian')
+
+                # Calculate subaperure diamater
+                self.subaperture_radius = kwargs['subaperture_radius']
+                if self.subaperture_radius is not None:
+                    aperture_diamater = 2*self.subaperture_radius
+                else:
+                    # Calculate sub-aperture diamater from the distance between centers 
+                    # (Assuming dense packing of apertures for now, could simulate gaps later)
+                    aperture_diamater = np.sqrt((m_cens.x[1]-m_cens.x[0])**2 + (m_cens.y[1]-m_cens.y[0])**2)
+
+                # Calculate extent of pupil-plane simulation (meters)
+                self.pupil_plane_diamater = max(m_cens.x.max() - m_cens.x.min(), m_cens.y.max() - m_cens.y.min()) + aperture_diamater
+                # Add a little extra for edges, not convinced not cutting them off
+                self.pupil_plane_diamater *= 1.05  
+
+                self.aperture_config = ['circular', aperture_diamater]
+                
             if self.mirror_layout == 'keck':
                 ###  Create a Keck-like layout.  Hardocded for now.
                 self.num_apertures = 36
