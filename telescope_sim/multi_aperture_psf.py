@@ -513,12 +513,21 @@ class MultiAperturePSFSampler:
         
         # retrieve current filter setup
         lam_setup = self.lam_setups[ i_filter ]
+        wf = lam_setup['wfs'][0]
         # Create a dummy wavefront electric field propogated from pupil plane to focal plane
         # (This seems to be necessary for reasons I couldn't figure out)
-        wf = lam_setup['prop'](lam_setup['wfs'][0])
+        ## wf = lam_setup['prop'](lam_setup['wfs'][0])
         
         # Theoretically, this should be set to sqrt() of the intensity, but results didn't look right
-        wf.electric_field = hcipy.Field(observation.flatten(), lam_setup['f_grid'])
+        ## wf.electric_field = hcipy.Field(observation.flatten(), lam_setup['f_grid'])
+        
+        wf = hcipy.Wavefront(
+            hcipy.Field(
+                np.sqrt(observation.flatten()).astype("complex128"), 
+                wf.grid
+            ), 
+            wf.wavelength
+        )
         
         ## Note: It appears when this is passed in, the scaling of
         ##       the PSF is irrelevant.
@@ -534,7 +543,7 @@ class MultiAperturePSFSampler:
         detector.integrate(wf, 1)
         
         # "Read out" detector, convert hcipy Field back into numpy array
-        read_out = np.abs(detector.read_out())
+        read_out = detector.read_out()
         
         # Return observation in 2d rather than flattned shape
         return np.array(read_out.shaped)
