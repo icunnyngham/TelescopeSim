@@ -514,13 +514,7 @@ class MultiAperturePSFSampler:
         # retrieve current filter setup
         lam_setup = self.lam_setups[ i_filter ]
         wf = lam_setup['wfs'][0]
-        # Create a dummy wavefront electric field propogated from pupil plane to focal plane
-        # (This seems to be necessary for reasons I couldn't figure out)
-        ## wf = lam_setup['prop'](lam_setup['wfs'][0])
-        
-        # Theoretically, this should be set to sqrt() of the intensity, but results didn't look right
-        ## wf.electric_field = hcipy.Field(observation.flatten(), lam_setup['f_grid'])
-        
+
         wf = hcipy.Wavefront(
             hcipy.Field(
                 np.sqrt(observation.flatten()).astype("complex128"), 
@@ -534,19 +528,20 @@ class MultiAperturePSFSampler:
         # num_photons/m^2 -> num_photons
         wf.total_power =  int_phot_flux * self.aper_area
         
-        
         detector = lam_setup['detector']
         
         # Because we're dealing with static atmospheres, integrations above a certain amount
         # of time don't make any sense, so instead of passing additional "integration time" param into this 
         # function, photon flux is assumed already integrated, and we passholder "integrate" here for "1 second"
+        # This will be different if dark current is taken into account
         detector.integrate(wf, 1)
         
         # "Read out" detector, convert hcipy Field back into numpy array
         read_out = detector.read_out()
         
-        # Return observation in 2d rather than flattned shape
-        return np.array(read_out.shaped)
+        # Return observation in 2d rather than flattned shape.  
+        # Shouldn't need to do abs, but poisson read noise seems to allow negative for some reason
+        return np.array(np.abs(read_out.shaped))
 
     
     def getPhaseScreen(self, 
