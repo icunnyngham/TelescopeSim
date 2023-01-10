@@ -1,7 +1,7 @@
 """
 Simulate multi-aperture telescope optics with piston, tip, and tilt control using HCIPy
 
-Author: Ian Cunnyngham (Institute for Astronomy, University of Hawai'i) 2019-2020
+Author: Ian Cunnyngham (Institute for Astronomy, University of Hawai'i) 2019-2023
 
 Features:
  - Sets up multi-aperture pupil plane with tip-tilt piston control
@@ -28,6 +28,9 @@ Features:
  2021-03
  - Deformable mirror can now be directly used for actuation instead of PTT actuation, or PTT aproximation via the DM
    (i.e. the DM can be set instead of ptt when generating samples and residual fits of the DM to atmospheres returned)
+
+ 2023-01
+ - Added per-sample normalization
  
  .sample() returns data structured for ML (more details in function): 
      X: (res,res,samples) tensor of PSFs (or convolved images) + (optionally) FFTs
@@ -82,6 +85,7 @@ class MultiAperturePSFSampler:
        {
            'include_fft': ...,     # (bool) Bundle FFT (real, imag) with PSF samples for machine learning
            'max_inten_norm': ...,  # (bool) Normalize PSFs by max acheivable intensity
+           'per_sample_norm': ..., # (bool) Normalize each PSF individually from [0-1]
            'pow_scale': ...,       # (float or False) Scale output by this power 
            'gauss_noise': ...,     # (float or False) sigma of gaussian noise (added after int norm, before power scaling)
        }
@@ -98,6 +102,7 @@ class MultiAperturePSFSampler:
         ep_default = {
            'include_fft': False,
            'max_inten_norm': True,
+           'per_sample_norm': False,
            'pow_scale': False,
            'gauss_noise': False   
         }
@@ -462,7 +467,7 @@ class MultiAperturePSFSampler:
             # Probably remove this for better detector noise
             if self.extra_processing['gauss_noise'] is not False:
                 out_samp += np.abs(np.random.normal(0, self.extra_processing['gauss_noise'], psf.shape))
-                
+            
             ### Create detector noise
             # If integrated photon flux isn't provided, not sure how much sense
             # read and other noise sources make, so only apply detector when it is provided
@@ -478,7 +483,11 @@ class MultiAperturePSFSampler:
             # (Small fractional powers compress range and gets ouput closer to standarized)
             if self.extra_processing['pow_scale'] is not False:
                 out_samp = np.power(out_samp, self.extra_processing['pow_scale']) 
-      
+    
+            if self.extra_processing['per_sample_norm'] is not False:
+                samp_min, samp_max = out_samp.min(), out_samp.max()
+                out_samp = (out_samp - samp_min)/(samp_max - samp_min)
+    
             Xs += [ out_samp[..., None] ]
             if self.extra_processing['include_fft']:
                 # If set, add FFT of this filter's output as extra channels
