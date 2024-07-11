@@ -88,6 +88,8 @@ class MultiAperturePSFSampler:
            'per_sample_norm': ..., # (bool) Normalize each PSF individually from [0-1]
            'pow_scale': ...,       # (float or False) Scale output by this power 
            'gauss_noise': ...,     # (float or False) sigma of gaussian noise (added after int norm, before power scaling)
+           'strehl_core_rad': ..., # (float) (radians) radius in the focal plane of the PSF core
+                                   #                   If ommitted or None, strehl is simply the 1-pixel peak brightness
        }
     
     """
@@ -104,7 +106,8 @@ class MultiAperturePSFSampler:
            'max_inten_norm': True,
            'per_sample_norm': False,
            'pow_scale': False,
-           'gauss_noise': False   
+           'gauss_noise': False,
+           'strehl_core_rad': None,
         }
         if extra_processing is None:
             extra_processing = ep_default
@@ -273,8 +276,25 @@ class MultiAperturePSFSampler:
             
             # Generate PSF with no errors to measure peak brightness for strehl
             ref_psf = self._psf(lam_setup)
+
+
             lam_setup['peak_int'] = ref_psf.max()
             lam_setup['peak_ind'] = ref_psf.argmax()
+
+            ## Strehl setup
+            # If strehl_core_rad is None, just use 1-pixel PSF peak 
+            # Else try to compare PSF core
+            if self.extra_processing['strehl_core_rad'] is not None:
+                core_radius_rad = self.extra_processing['strehl_core_rad'] 
+                rs = np.sqrt(f_grid.x**2 + f_grid.y**2)
+                rs_sel = rs < core_radius_rad
+                ref_core_vals = ref_psf.flat[rs_sel]
+                strehl_ref_sq_sum = (ref_core_vals**2).sum()
+
+                lam_setup['strehl_inds'] = rs_sel
+                lam_setup['strehl_ref_sq_sum'] = strehl_ref_sq_sum
+                lam_setup['ref_core_vals'] = ref_core_vals
+
             
             # Store normalization for PSF convolving
             # (The PSF should sum to 1 when convolving)
@@ -451,7 +471,7 @@ class MultiAperturePSFSampler:
             
             # Measure strehl for fitler if requested
             if meas_strehl:
-                strehls += [ psf.flat[ lam_setup['peak_ind'] ] / lam_setup['peak_int'] ]
+                strehls += [ self._strehl(lam_setup, psf) ]
             
             # Normalize PSF is set
             if self.extra_processing['max_inten_norm']:
@@ -551,7 +571,39 @@ class MultiAperturePSFSampler:
         # Return observation in 2d rather than flattned shape.  
         # Shouldn't need to do abs, but poisson read noise seems to allow negative for some reason
         return np.array(np.abs(read_out.shaped))
+    
+    def _strehl(self, lam_setup, psf):
+        """
+        Returns a strehl estimation of the current PSF
 
+        Currently supports two very basic methods:
+        - (default): if extra_processing['strehl_core_rad'] is None
+                     return the 1 pixel peak brightness compared to reference unabberated psf
+        - If strehl_core_rad (the radius of the core of the psf in radians in the focal plane)
+          is set, compare the weighted intensity of the core.  This should be more accurate if a bit slower
+        - Could theoretically in the future do something more advanced like Marcos Van Dam's technique, 
+          which is much more expensive, but would probably do a better job
+
+        Parameters
+        - - - - - - 
+        lam_setup:    The filter config used to generate the PSF
+        psf:          The PSF being measured (before normalization, noise, etc)
+
+        Output
+        - - - - - - 
+        strehl:       An estimate of the strehl ratio of the psf
+
+        """
+        if self.extra_processing['strehl_core_rad'] is None:
+            return psf.flat[ lam_setup['peak_ind'] ] / lam_setup['peak_int']
+        else:
+            rs_sel = lam_setup['strehl_inds'] 
+            strehl_ref_sq_sum = lam_setup['strehl_ref_sq_sum']
+            strehl_ref_vals = lam_setup['ref_core_vals']
+
+            psf_core_vals = psf.flat[rs_sel] 
+            return float( (psf_core_vals * strehl_ref_vals).sum() / strehl_ref_sq_sum )
+            
     
     def getPhaseScreen(self, 
                        atmos=None, 
