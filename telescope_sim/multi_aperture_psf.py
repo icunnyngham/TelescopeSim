@@ -35,6 +35,9 @@ Features:
  2024-07
  - Added more robust strehl measurement.  
    'extra_processing' -> 'strehl_core_rad' selects the radius of the ideal PSF to compare
+
+ 2024-09
+ - Added channels_first option for pytorch
  
  .sample() returns data structured for ML (more details in function): 
      X: (res,res,samples) tensor of PSFs (or convolved images) + (optionally) FFTs
