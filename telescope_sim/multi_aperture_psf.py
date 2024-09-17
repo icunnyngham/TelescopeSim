@@ -162,8 +162,8 @@ class MultiAperturePSFSampler:
                             aper_shape,  
                             mPos, 
                             return_segments=True)
-        self.aper = aper(self.pupil_grid)
-        self.segments = hcipy.evaluate_supersampled(segments, self.pupil_grid, 1)
+        self.aper = hcipy.evaluate_supersampled(aper, self.pupil_grid, 16)
+        self.segments = hcipy.evaluate_supersampled(segments, self.pupil_grid, 16)
         # Add piston, tip, tilt control to each sub-aperture
         self.sm = hcipy.SegmentedDeformableMirror(self.segments)
         
