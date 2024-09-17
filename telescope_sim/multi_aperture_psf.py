@@ -31,6 +31,10 @@ Features:
 
  2023-01
  - Added per-sample normalization
+
+ 2024-07
+ - Added more robust strehl measurement.  
+   'extra_processing' -> 'strehl_core_rad' selects the radius of the ideal PSF to compare
  
  .sample() returns data structured for ML (more details in function): 
      X: (res,res,samples) tensor of PSFs (or convolved images) + (optionally) FFTs
@@ -90,6 +94,7 @@ class MultiAperturePSFSampler:
            'gauss_noise': ...,     # (float or False) sigma of gaussian noise (added after int norm, before power scaling)
            'strehl_core_rad': ..., # (float) (radians) radius in the focal plane of the PSF core
                                    #                   If ommitted or None, strehl is simply the 1-pixel peak brightness
+           'channels_first': ...   # (bool) (default False) Whether to stack images in the first dimension (pytorch, etc) or last (keras, etc)
        }
     
     """
@@ -108,6 +113,7 @@ class MultiAperturePSFSampler:
            'pow_scale': False,
            'gauss_noise': False,
            'strehl_core_rad': None,
+           'channels_first': False,
         }
         if extra_processing is None:
             extra_processing = ep_default
@@ -528,6 +534,9 @@ class MultiAperturePSFSampler:
         
         # Combine list of X samples into tensor
         Xs = np.concatenate(Xs, axis=2)
+        if self.extra_processing["channels_first"]:
+            Xs = np.transpose(Xs, (2, 0, 1))
+
         if meas_strehl:
             return Xs, out_actuate, strehls
         else:
